@@ -2,7 +2,7 @@
 #define SHAREDPTR_H
 
 #include <cstdlib>
-#include <mutex>
+#include <pthread.h>
 
 namespace cs540{
 
@@ -13,7 +13,7 @@ class SharedPtr{
 	private:
 		T* dataptr;
 		static unsigned int refCount;
-		std::mutex objLock;
+		pthread_mutex_t objLock;
 	public:
 	
 	
@@ -21,30 +21,36 @@ class SharedPtr{
 		SharedPtr(){
 			dataptr = nullptr;
 			refCount = 0;
+			pthread_mutex_init(&objLock, 0);
 				
 		}
 		
 		template <typename U> explicit SharedPtr(U* objptr){
 			dataptr = (T*) objptr;
 			refCount = 1;
+			pthread_mutex_init(&objLock, 0);
 		}
 		
 	
 		SharedPtr(const SharedPtr &p){
+			pthread_mutex_init(&objLock, 0);
 			if(p.get() != nullptr){
 				dataptr = (T*) p.get();
-				std::lock_guard<std::mutex> objL(objLock);
+				pthread_mutex_lock(&objLock);
 				refCount++;
 				p.increment(); // check if you actually have to double increment
+				pthread_mutex_unlock(&objLock);
 			}
 		}
 	
 		template <typename U> SharedPtr(SharedPtr<U> &p){
+			pthread_mutex_init(&objLock, 0);
 			if(p.get() != nullptr){
 				dataptr = (T*) p.get();
-				std::lock_guard<std::mutex> objL(objLock);
+				pthread_mutex_lock(&objLock);
 				refCount++;
 				p.increment(); // check if you actually have to double increment
+				pthread_mutex_unlock(&objLock);
 			}
 		}
 		
@@ -65,11 +71,14 @@ class SharedPtr{
 		
 		
 		~SharedPtr(){
-			std::lock_guard<std::mutex> objL(objLock);
+			pthread_mutex_lock(&objLock);
 			if(--refCount == 0){
 				//delete dataptr;
 				dataptr = nullptr;
+				pthread_mutex_unlock(&objLock);
 			}
+			else pthread_mutex_unlock(&objLock);
+			pthread_mutex_destroy(&objLock);
 
 		}
 		
@@ -80,16 +89,19 @@ class SharedPtr{
 		
 		void reset() {
 			dataptr = nullptr;
+			pthread_mutex_lock(&objLock);
 			refCount--;
+			pthread_mutex_unlock(&objLock);
 		}
 		
 		template <typename U> void reset(U *p){
-			std::lock_guard<std::mutex> objL(objLock);
+			pthread_mutex_lock(&objLock);
 			if(--refCount == 0){
 				//delete dataptr;
 				dataptr = (T*) p;
 				refCount = 1;
 			}
+			pthread_mutex_unlock(&objLock);
 		
 		}
 		
@@ -115,19 +127,24 @@ class SharedPtr{
 		}
 		
 		void increment(){
-			std::lock_guard<std::mutex> objL(objLock);
+			pthread_mutex_lock(&objLock);
 			refCount++;
+			pthread_mutex_unlock(&objLock);
 		}
 		
 		void decrement(){
-			std::lock_guard<std::mutex> objL(objLock);
+			pthread_mutex_lock(&objLock);
 			if(--refCount == 0){
 				//delete dataptr;
 				dataptr = nullptr;
 			}
+			pthread_mutex_unlock(&objLock);
 		}
 
 };
+
+template <typename T>
+unsigned int SharedPtr<T>::refCount = 0;
 
 
 //================= Free standing functions =================
